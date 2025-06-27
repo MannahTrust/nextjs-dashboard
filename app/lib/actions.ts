@@ -145,3 +145,110 @@ export async function registerUser(
   // 7. Redirect to the login page upon successful registration
   redirect('/login');
 }
+
+export type State = {
+  errors?: {
+    name?: string[];
+    email?: string[];
+    image_url?: string[];
+    // Add any other fields that can have errors
+  };
+  message?: string | null;
+};
+
+const CustomerSchema = z.object({
+  id: z.string(),
+  name: z.string({
+    invalid_type_error: 'Please enter a name.',
+  }),
+  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  image_url: z.string().url({ message: 'Please enter a valid URL.'}).optional(),
+});
+
+const CreateCustomerSchema = CustomerSchema.omit({ id: true });
+const UpdateCustomerSchema = CustomerSchema.omit({ id: true });
+
+// --- CREATE CUSTOMER ---
+// 2. Use the 'State' type for the 'prevState' and the function's return type.
+export async function createCustomer(prevState: State, formData: FormData): Promise<State> {
+  // Validate form fields
+  const validatedFields = CreateCustomerSchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    image_url: formData.get('image_url'),
+  });
+
+  // If form validation fails, return errors.
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create Customer.',
+    };
+  }
+
+  // Prepare data for insertion
+  const { name, email, image_url } = validatedFields.data;
+
+  try {
+    await sql`
+      INSERT INTO customers (name, email, image_url)
+      VALUES (${name}, ${email}, ${image_url || ''})
+    `;
+  } catch (error) {
+    return {
+      message: 'Database Error: Failed to Create Customer.',
+    };
+  }
+
+  // Revalidate and redirect
+  revalidatePath('/dashboard/customers');
+  redirect('/dashboard/customers');
+}
+
+// --- UPDATE CUSTOMER ---
+// 3. Apply the same 'State' type to the update function.
+export async function updateCustomer(id: string, prevState: State, formData: FormData): Promise<State> {
+  const validatedFields = UpdateCustomerSchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    image_url: formData.get('image_url'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Update Customer.',
+    };
+  }
+
+  const { name, email, image_url } = validatedFields.data;
+
+  try {
+    await sql`
+      UPDATE customers
+      SET name = ${name}, email = ${email}, image_url = ${image_url || ''}
+      WHERE id = ${id}
+    `;
+  } catch (error) {
+    return { message: 'Database Error: Failed to Update Customer.' };
+  }
+
+  revalidatePath('/dashboard/customers');
+  redirect('/dashboard/customers');
+}
+
+// --- DELETE CUSTOMER ---
+export async function deleteCustomer(id: string) {
+  // It's good practice to add a try...catch block here too.
+  try {
+    await sql`DELETE FROM customers WHERE id = ${id}`;
+    // Revalidating the path is the key side-effect we need.
+    revalidatePath('/dashboard/customers');
+  } catch (error) {
+    // If you want to handle the error, you could log it
+    // or re-throw it, but for the form's sake, we don't return it.
+    console.error('Database Error: Failed to Delete Customer.', error);
+    // You could throw a new error to indicate failure to the server logs
+    throw new Error('Failed to Delete Customer.');
+  }
+}
