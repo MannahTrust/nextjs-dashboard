@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import postgres from 'postgres';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import { hash } from 'bcrypt';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
@@ -91,4 +92,56 @@ export async function authenticate(
     }
     throw error;
   }
+}
+
+export async function registerUser(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  // 1. Define a schema for input validation using Zod
+  const RegisterSchema = z.object({
+    name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
+    email: z.string().email({ message: 'Please enter a valid email.' }),
+    password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  });
+
+  // 2. Parse and validate form data
+  const validatedFields = RegisterSchema.safeParse(
+    Object.fromEntries(formData.entries()),
+  );
+
+  if (!validatedFields.success) {
+    const errorMessages = validatedFields.error.errors.map(e => e.message).join(' ');
+    return errorMessages;
+  }
+
+  const { name, email, password } = validatedFields.data;
+
+  try {
+    // 3. Hash the password before storing it
+    const hashedPassword = await hash(password, 10);
+
+    // 4. Check if user already exists using a raw SQL query
+    const existingUsers = await sql`
+      SELECT * FROM users WHERE email = ${email}
+    `;
+
+    if (existingUsers.length > 0) {
+      return 'An account with this email already exists.';
+    }
+
+    // 5. Insert the new user into the database
+    await sql`
+      INSERT INTO users (name, email, password)
+      VALUES (${name}, ${email}, ${hashedPassword})
+    `;
+
+  } catch (error) {
+    // 6. Handle database or other unexpected errors
+    console.error(error);
+    return 'Something went wrong. Please try again.';
+  }
+
+  // 7. Redirect to the login page upon successful registration
+  redirect('/login');
 }
