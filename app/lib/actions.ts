@@ -345,6 +345,7 @@ export async function createCustomer(prevState: FormState, formData: FormData): 
 }
 
 // --- UPDATE CUSTOMER ---
+// This action handles replacing the image file.
 export async function updateCustomer(id: string, prevState: FormState, formData: FormData): Promise<FormState> {
   const validatedFields = UpdateCustomerSchema.safeParse({
     name: formData.get('name'),
@@ -357,32 +358,53 @@ export async function updateCustomer(id: string, prevState: FormState, formData:
   }
   
   const { name, email, imageFile } = validatedFields.data;
+  // This hidden input from the form is crucial.
   const existingImageUrl = formData.get('existingImageUrl') as string || '';
   let finalImageUrl = existingImageUrl;
 
   try {
+    // Only perform storage operations if a new file is actually uploaded.
     if (imageFile && imageFile.size > 0) {
+      console.log('New image file detected. Starting replacement process...');
       const fileExt = imageFile.name.split('.').pop();
-      // --- THIS IS THE FIX: The path should be ONLY the filename. ---
       const newFileName = `${Date.now()}_${Math.random()}.${fileExt}`;
 
-      await supabase.storage.from('customer-images').upload(newFileName, imageFile);
-      const { data } = supabase.storage.from('customer-images').getPublicUrl(newFileName);
-      if (!data.publicUrl) throw new Error("Could not get new public URL.");
-      finalImageUrl = data.publicUrl;
+      // 1. Upload the new file.
+      const { error: uploadError } = await supabase.storage
+        .from('customer-images')
+        .upload(newFileName, imageFile);
+      if (uploadError) throw new Error(`Storage Error: ${uploadError.message}`);
+      console.log('New image uploaded:', newFileName);
 
-      const oldPath = getPathFromUrl(existingImageUrl);
-      if (oldPath) {
-        await supabase.storage.from('customer-images').remove([oldPath]);
+      // 2. Get the new public URL.
+      const { data: urlData } = supabase.storage.from('customer-images').getPublicUrl(newFileName);
+      if (!urlData.publicUrl) throw new Error("Could not get new public URL.");
+      finalImageUrl = urlData.publicUrl;
+
+      // 3. Delete the old image file from storage.
+      const oldFileName = getPathFromUrl(existingImageUrl);
+      if (oldFileName) {
+        console.log('Attempting to delete old image:', oldFileName);
+        const { error: deleteError } = await supabase.storage
+          .from('customer-images')
+          .remove([oldFileName]);
+        if (deleteError) {
+          // Log the error but don't block the update process
+          console.error("Failed to delete old image, but proceeding:", deleteError.message);
+        } else {
+          console.log('Successfully deleted old image.');
+        }
       }
     }
 
+    // 4. Update the database record.
     await sql`
-      UPDATE customers SET name = ${name}, email = ${email}, image_url = ${finalImageUrl}
+      UPDATE customers
+      SET name = ${name}, email = ${email}, image_url = ${finalImageUrl}
       WHERE id = ${id}
     `;
   } catch (error: any) {
-    return { errors: {}, message: error.message };
+    return { errors: {}, message: `Operation Failed: ${error.message}` };
   }
 
   revalidatePath('/dashboard/customers');
