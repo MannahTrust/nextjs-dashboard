@@ -1,22 +1,33 @@
 import type { NextConfig } from 'next';
 
-const nextConfig: NextConfig = {
-  /* config options here */
+/* const nextConfig: NextConfig = {
+  
   devIndicators: false,
   images: {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'pbs.twimg.com', // Example: Whitelist images from Twitter
+        hostname: 'hloxoqwhufjkgglnblrs.supabase.co', // Example: Whitelist images from Twitter
         port: '',
-        pathname: '/customers/**', // Example: Allow only images from the profile_images path
+        pathname: '/storage/v1/s3/public/customer-images/**', // Example: Allow only images from the profile_images path
       },
-      // You can add more domains here as needed
-      // For example, to allow your placeholder to work (NOT RECOMMENDED FOR PRODUCTION):
-      // {
-      //   protocol: 'https',
-      //   hostname: 'www.customers',
-      // },
+      
+    ],
+  },
+}; */
+
+const nextConfig = {
+  devIndicators: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        // This is your specific Supabase project hostname from the error log.
+        hostname: 'hloxoqwhufjkgglnblrs.supabase.co',
+        port: '',
+        // This allows all images from your 'customer-images' bucket.
+        pathname: '/storage/v1/object/public/customer-images/**',
+      },
     ],
   },
 };

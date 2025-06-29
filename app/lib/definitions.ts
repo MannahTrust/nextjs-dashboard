@@ -1,6 +1,9 @@
 // This file contains type definitions for your data.
 // It describes the shape of the data, and what data type each property should accept.
 // For simplicity of teaching, we're manually defining these types.
+
+import { ReactNode } from "react";
+
 // However, these types are generated automatically if you're using an ORM such as Prisma.
 export type User = {
   id: string;
@@ -14,6 +17,12 @@ export type Customer = {
   name: string;
   email: string;
   image_url: string;
+};
+
+export type CustomerForm = {
+  id: string;
+  name: string;
+  email: string;
 };
 
 export type Invoice = {
@@ -76,6 +85,8 @@ export type FormattedCustomersTable = {
 };
 
 export type CustomerField = {
+  email: ReactNode;
+  image_url: any;
   id: string;
   name: string;
 };
@@ -85,4 +96,24 @@ export type InvoiceForm = {
   customer_id: string;
   amount: number;
   status: 'pending' | 'paid';
+};
+
+export type State = {
+  errors?: {
+    customerId?: string[];
+    amount?: string[];
+    status?: string[];
+    // Add any other fields from your forms
+  };
+  message?: string | null;
+};
+
+export type FormState = {
+  message: string | null;
+  // The 'errors' object itself is not optional, but its properties are.
+  errors: {
+    name?: string[];
+    email?: string[];
+    imageFile?: string[];
+  };
 };

@@ -1,14 +1,17 @@
 import postgres from 'postgres';
 import {
+  Customer,
   CustomerField,
+  CustomerForm,
   CustomersTableType,
   InvoiceForm,
   InvoicesTable,
   LatestInvoiceRaw,
-  Revenue,
+  Revenue
+  
 } from './definitions';
 import { formatCurrency } from './utils';
-import { unstable_noStore as noStore } from 'next/cache';
+import { unstable_noStore as noStore, unstable_noStore } from 'next/cache';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
@@ -213,26 +216,77 @@ export async function fetchCustomersPages(query: string) {
   }
 }
 
-
-// --- FETCH A SINGLE CUSTOMER BY ID (for the edit page) ---
-export async function fetchCustomerById(id: string) {
-  noStore();
+/* export async function fetchCustomerById(id: string): Promise<Customer | undefined> {
+  unstable_noStore();
   try {
-    const data = await sql`
+    const data = await sql<Customer[]>`
       SELECT
-        id,
-        name,
-        email,
-        image_url
+        customers.id,
+        customers.name,
+        customers.email,
+        customers.image_url
       FROM customers
-      WHERE id = ${id};
+      WHERE customers.id = ${id};
     `;
 
-    // The result is an array, we just need the first item
-    const customer = data[0];
-    return customer;
+    // THE FINAL CORRECTION: Return the first element of the 'data' result directly.
+    return data[0];
+
+  } catch (error) {
+    // You can now remove the console.log from here, as we've solved the issue.
+    console.error('Database Error:', error);
+    return undefined;
+  }
+} */
+
+/* export async function fetchCustomerById(id: string): Promise<Customer | undefined> {
+  unstable_noStore();
+  try {
+    // The type generic should be <Customer> for each row
+    const data = await sql<Customer>`
+      SELECT
+        customers.id,
+        customers.name,
+        customers.email
+      FROM customers
+      WHERE customers.id = ${id};
+    `;
+    // Return the first element directly from the result.
+    return data[0];
+  } catch (error) {
+    console.error('Database Error:', error);
+    return undefined;
+  }
+} */
+
+
+export async function fetchCustomers(): Promise<Customer[]> {
+  noStore();
+  try {
+    // The key is to select all columns so image_url and email are included.
+    const data = await sql<Customer[]>`SELECT * FROM customers ORDER BY name ASC`;
+    return data;
   } catch (err) {
     console.error('Database Error:', err);
-    throw new Error('Failed to fetch customer.');
+    throw new Error('Failed to fetch all customers.');
   }
 }
+
+// You will also need this function for your edit page to work.
+export async function fetchCustomerById(id: string): Promise<Customer | undefined> {
+  noStore();
+  try {
+    const data = await sql<Customer[]>`
+    SELECT * 
+    FROM customers 
+    WHERE id = ${id};`;
+
+    return data[0];
+  } catch (error) {
+    console.error('Database Error:', error);
+    // The notFound function is a Next.js utility that will show the 404 page.
+    // We don't call it here, but the page that uses this function will.
+    return undefined; 
+  }
+}
+

@@ -6,7 +6,7 @@ import {
   CurrencyDollarIcon,
   UserCircleIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '@/app/ui/button';
+import { Button, SubmitButton } from '@/app/ui/button';
 import { createInvoice } from '@/app/lib/actions';
 
 export default function Form({ customers }: { customers: CustomerField[] }) {
@@ -108,7 +108,10 @@ export default function Form({ customers }: { customers: CustomerField[] }) {
         >
           Cancel
         </Link>
-        <Button type="submit">Create Invoice</Button>
+       {/*  <Button type="submit">Create Invoice</Button> */}
+        <SubmitButton pendingText="Creating invoice...">
+          Create Invoice
+        </SubmitButton>
       </div>
     </form>
   );

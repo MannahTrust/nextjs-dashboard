@@ -6,6 +6,8 @@ import postgres from 'postgres';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 import { hash } from 'bcrypt';
+import { supabase } from './supabaseClient';
+import { FormState } from './definitions';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
@@ -146,7 +148,7 @@ export async function registerUser(
   redirect('/login');
 }
 
-export type State = {
+/* export type State = {
   errors?: {
     name?: string[];
     email?: string[];
@@ -154,23 +156,24 @@ export type State = {
     // Add any other fields that can have errors
   };
   message?: string | null;
-};
+}; */
 
-const CustomerSchema = z.object({
+// --- CUSTOMER SCHEMA ---
+/* const CustomerSchema = z.object({
   id: z.string(),
   name: z.string({
     invalid_type_error: 'Please enter a name.',
   }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
-  image_url: z.string().url({ message: 'Please enter a valid URL.'}).optional(),
+  image_url: z.string().url({ message: 'Please enter a valid URL.' }).optional(),
 });
 
 const CreateCustomerSchema = CustomerSchema.omit({ id: true });
-const UpdateCustomerSchema = CustomerSchema.omit({ id: true });
+const UpdateCustomerSchema = CustomerSchema.omit({ id: true }); */
 
 // --- CREATE CUSTOMER ---
 // 2. Use the 'State' type for the 'prevState' and the function's return type.
-export async function createCustomer(prevState: State, formData: FormData): Promise<State> {
+/* export async function createCustomer(prevState: State, formData: FormData): Promise<State> {
   // Validate form fields
   const validatedFields = CreateCustomerSchema.safeParse({
     name: formData.get('name'),
@@ -203,11 +206,11 @@ export async function createCustomer(prevState: State, formData: FormData): Prom
   // Revalidate and redirect
   revalidatePath('/dashboard/customers');
   redirect('/dashboard/customers');
-}
+} */
 
 // --- UPDATE CUSTOMER ---
 // 3. Apply the same 'State' type to the update function.
-export async function updateCustomer(id: string, prevState: State, formData: FormData): Promise<State> {
+/* export async function updateCustomer(id: string, prevState: State, formData: FormData): Promise<State> {
   const validatedFields = UpdateCustomerSchema.safeParse({
     name: formData.get('name'),
     email: formData.get('email'),
@@ -235,10 +238,10 @@ export async function updateCustomer(id: string, prevState: State, formData: For
 
   revalidatePath('/dashboard/customers');
   redirect('/dashboard/customers');
-}
+} */
 
 // --- DELETE CUSTOMER ---
-export async function deleteCustomer(id: string) {
+/* export async function deleteCustomer(id: string) {
   // It's good practice to add a try...catch block here too.
   try {
     await sql`DELETE FROM customers WHERE id = ${id}`;
@@ -249,6 +252,160 @@ export async function deleteCustomer(id: string) {
     // or re-throw it, but for the form's sake, we don't return it.
     console.error('Database Error: Failed to Delete Customer.', error);
     // You could throw a new error to indicate failure to the server logs
+    throw new Error('Failed to Delete Customer.');
+  }
+} */
+
+// --- New CUSTOMERS ---
+
+// Define the shape of the state object for useFormState
+export type State = {
+  errors?: {
+    name?: string[];
+    email?: string[];
+    imageFile?: string[];
+  };
+  message?: string | null;
+};
+
+// Zod schemas (no changes)
+const CreateCustomerSchema = z.object({
+  name: z.string().min(1, { message: 'Please enter a name.' }),
+  email: z.string().email({ message: 'Please enter a valid email.' }),
+  imageFile: z
+    .instanceof(File, { message: 'Image is required.' })
+    .refine((file) => file.size > 0, 'Image is required.')
+    .refine((file) => file.size <= 5 * 1024 * 1024, `Max image size is 5MB.`),
+});
+
+const UpdateCustomerSchema = z.object({
+  name: z.string().min(1, { message: 'Please enter a name.' }),
+  email: z.string().email({ message: 'Please enter a valid email.' }),
+  imageFile: z
+    .instanceof(File)
+    .optional()
+    .refine((file) => !file || file.size === 0 || file.size <= 5 * 1024 * 1024, `Max image size is 5MB.`),
+});
+
+// Helper to get the filename from a URL
+const getPathFromUrl = (url: string | null): string | null => {
+    if (!url) return null;
+    try {
+        const urlObj = new URL(url);
+        const pathParts = urlObj.pathname.split('/');
+        return pathParts[pathParts.length - 1]; // Return only the last part (the filename)
+    } catch {
+        return null;
+    }
+}
+
+// --- CREATE CUSTOMER ---
+export async function createCustomer(prevState: FormState, formData: FormData): Promise<FormState> {
+  const validatedFields = CreateCustomerSchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    imageFile: formData.get('imageFile'),
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors, message: 'Missing fields.' };
+  }
+
+  const { name, email, imageFile } = validatedFields.data;
+  let publicUrl = '';
+
+  try {
+    const fileExt = imageFile.name.split('.').pop();
+    // --- THIS IS THE FIX: The path should be ONLY the filename. ---
+    const fileName = `${Date.now()}_${Math.random()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('customer-images')
+      .upload(fileName, imageFile); // Upload with just the filename
+
+    if (uploadError) throw new Error(`Storage Error: ${uploadError.message}`);
+
+    const { data } = supabase.storage
+      .from('customer-images')
+      .getPublicUrl(fileName); // Get URL with just the filename
+    
+    if (!data.publicUrl) throw new Error("Could not get public URL for the image.");
+    publicUrl = data.publicUrl;
+
+    await sql`
+      INSERT INTO customers (name, email, image_url)
+      VALUES (${name}, ${email}, ${publicUrl})
+    `;
+  } catch (error: any) {
+    return { errors: {}, message: error.message };
+  }
+  
+  revalidatePath('/dashboard/customers');
+  redirect('/dashboard/customers');
+}
+
+// --- UPDATE CUSTOMER ---
+export async function updateCustomer(id: string, prevState: FormState, formData: FormData): Promise<FormState> {
+  const validatedFields = UpdateCustomerSchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    imageFile: formData.get('imageFile'),
+  });
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors, message: 'Missing fields.' };
+  }
+  
+  const { name, email, imageFile } = validatedFields.data;
+  const existingImageUrl = formData.get('existingImageUrl') as string || '';
+  let finalImageUrl = existingImageUrl;
+
+  try {
+    if (imageFile && imageFile.size > 0) {
+      const fileExt = imageFile.name.split('.').pop();
+      // --- THIS IS THE FIX: The path should be ONLY the filename. ---
+      const newFileName = `${Date.now()}_${Math.random()}.${fileExt}`;
+
+      await supabase.storage.from('customer-images').upload(newFileName, imageFile);
+      const { data } = supabase.storage.from('customer-images').getPublicUrl(newFileName);
+      if (!data.publicUrl) throw new Error("Could not get new public URL.");
+      finalImageUrl = data.publicUrl;
+
+      const oldPath = getPathFromUrl(existingImageUrl);
+      if (oldPath) {
+        await supabase.storage.from('customer-images').remove([oldPath]);
+      }
+    }
+
+    await sql`
+      UPDATE customers SET name = ${name}, email = ${email}, image_url = ${finalImageUrl}
+      WHERE id = ${id}
+    `;
+  } catch (error: any) {
+    return { errors: {}, message: error.message };
+  }
+
+  revalidatePath('/dashboard/customers');
+  redirect('/dashboard/customers');
+}
+
+// --- DELETE CUSTOMER ---
+export async function deleteCustomer(id: string) {
+  try {
+    const result = await sql`SELECT image_url FROM customers WHERE id = ${id}`;
+    const customer = result[0];
+    await sql`DELETE FROM customers WHERE id = ${id}`;
+
+    if (customer?.image_url) {
+        const pathToDelete = getPathFromUrl(customer.image_url);
+        if (pathToDelete) {
+            await supabase.storage.from('customer-images').remove([pathToDelete]);
+        }
+    }
+    revalidatePath('/dashboard/customers');
+    return { success: true };
+  } catch (error) {
+    console.error('Database Error:', error);
     throw new Error('Failed to Delete Customer.');
   }
 }

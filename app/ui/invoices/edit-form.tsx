@@ -8,7 +8,7 @@ import {
   UserCircleIcon,
 } from '@heroicons/react/24/outline';
 import Link from 'next/link';
-import { Button } from '@/app/ui/button';
+import { Button, SubmitButton } from '@/app/ui/button';
 import { updateInvoice } from '@/app/lib/actions';
 
 export default function EditInvoiceForm({
@@ -121,7 +121,10 @@ export default function EditInvoiceForm({
         >
           Cancel
         </Link>
-        <Button type="submit">Edit Invoice</Button>
+       {/*  <Button type="submit">Edit Invoice</Button> */}
+        <SubmitButton pendingText="Editing invoice...">
+                  Edit Invoice
+                </SubmitButton>
       </div>
     </form>
   );
